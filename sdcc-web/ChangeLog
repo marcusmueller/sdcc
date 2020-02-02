@@ -1,20 +1,3 @@
-2020-02-01 Philipp Klaus Krause <pkk AT spth.de>
-
-	* index.php:
-	  Fix 4.0.0 release year.
-
-2020-01-30 Philipp Klaus Krause <pkk AT spth.de>
-
-	* index.php,
-	  previous.php:
-	  Added News - SDCC 4.0.0 release.
-
-2020-01-24 Philipp Klaus Krause <pkk AT spth.de>
-
-	* index.php,
-	  previous.php:
-	  Added News - SDCC 4.0.0 RC1.
-
 2019-06-06 Philipp Klaus Krause <pkk AT spth.de>
 
 	* index.php:
