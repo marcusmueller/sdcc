@@ -321,7 +321,7 @@ z80_init_asmops (void)
   asmop_return.size = 4;
   memset (asmop_return.regs, -1, 9);
   if (IS_GB)
-    z80_init_reg_asmop(&asmop_return, (const signed char[]){E_IDX, D_IDX, L_IDX, H_IDX, -1});
+    z80_init_reg_asmop(&asmop_return, (const signed char[]){L_IDX, H_IDX, C_IDX, B_IDX, -1});
   else
     z80_init_reg_asmop(&asmop_return, (const signed char[]){L_IDX, H_IDX, E_IDX, D_IDX, -1});
     
@@ -498,14 +498,18 @@ isPairInUse (PAIR_ID id, const iCode * ic)
 static bool
 isPairDead (PAIR_ID id, const iCode * ic)
 {
+  const bitVect *r = (!options.oldralloc ? ic->rSurv :
+                      (POINTER_SET (ic) ? ic->rMask :
+                       (bitVectCplAnd (bitVectCopy (ic->rMask), z80_rUmaskForOp (IC_RESULT (ic))))));
+
   if (id == PAIR_DE)
-    return !(bitVectBitValue (ic->rSurv, D_IDX) || bitVectBitValue (ic->rSurv, E_IDX));
+    return !(bitVectBitValue (r, D_IDX) || bitVectBitValue (r, E_IDX));
   else if (id == PAIR_BC)
-    return !(bitVectBitValue (ic->rSurv, B_IDX) || bitVectBitValue (ic->rSurv, C_IDX));
+    return !(bitVectBitValue (r, B_IDX) || bitVectBitValue (r, C_IDX));
   else if (id == PAIR_HL)
-    return !(bitVectBitValue (ic->rSurv, H_IDX) || bitVectBitValue (ic->rSurv, L_IDX));
+    return !(bitVectBitValue (r, H_IDX) || bitVectBitValue (r, L_IDX));
   else if (id == PAIR_IY)
-    return !(bitVectBitValue (ic->rSurv, IYH_IDX) || bitVectBitValue (ic->rSurv, IYL_IDX));
+    return !(bitVectBitValue (r, IYH_IDX) || bitVectBitValue (r, IYL_IDX));
   else
     {
       wassertl (0, "Only implemented for DE, BC, HL and IY");
@@ -4659,10 +4663,33 @@ _saveRegsForCall (const iCode * ic, bool dontsaveIY)
 
   if (_G.saves.saved == FALSE)
     {
-      const bool push_bc = bitVectBitValue (ic->rSurv, B_IDX) && !ftype->funcAttrs.preserved_regs[B_IDX] || bitVectBitValue (ic->rSurv, C_IDX) && !ftype->funcAttrs.preserved_regs[C_IDX];
-      const bool push_de = bitVectBitValue (ic->rSurv, D_IDX) && !ftype->funcAttrs.preserved_regs[D_IDX] || bitVectBitValue (ic->rSurv, E_IDX) && !ftype->funcAttrs.preserved_regs[E_IDX];
-      const bool push_hl = bitVectBitValue (ic->rSurv, H_IDX) || bitVectBitValue (ic->rSurv, L_IDX);
-      const bool push_iy = !dontsaveIY && (bitVectBitValue (ic->rSurv, IYH_IDX) || bitVectBitValue (ic->rSurv, IYL_IDX));
+      bool push_bc, push_de, push_hl, push_iy;
+
+      if (options.oldralloc)
+        {
+          bool deInUse, bcInUse;
+          bool bcInRet = FALSE, deInRet = FALSE;
+          bitVect *rInUse;
+
+          rInUse = bitVectCplAnd (bitVectCopy (ic->rMask), z80_rUmaskForOp (IC_RESULT (ic)));
+
+          deInUse = bitVectBitValue (rInUse, D_IDX) || bitVectBitValue (rInUse, E_IDX);
+          bcInUse = bitVectBitValue (rInUse, B_IDX) || bitVectBitValue (rInUse, C_IDX);
+
+          emitDebug ("; _saveRegsForCall: deInUse: %u bcInUse: %u", deInUse, bcInUse);
+
+          push_bc = bcInUse && !bcInRet;
+          push_de = deInUse && !deInRet;
+          push_hl = FALSE;
+          push_iy = FALSE;
+        }
+      else
+        {
+          push_bc = bitVectBitValue (ic->rSurv, B_IDX) && !ftype->funcAttrs.preserved_regs[B_IDX] || bitVectBitValue (ic->rSurv, C_IDX) && !ftype->funcAttrs.preserved_regs[C_IDX];
+          push_de = bitVectBitValue (ic->rSurv, D_IDX) && !ftype->funcAttrs.preserved_regs[D_IDX] || bitVectBitValue (ic->rSurv, E_IDX) && !ftype->funcAttrs.preserved_regs[E_IDX];
+          push_hl = bitVectBitValue (ic->rSurv, H_IDX) || bitVectBitValue (ic->rSurv, L_IDX);
+          push_iy = !dontsaveIY && (bitVectBitValue (ic->rSurv, IYH_IDX) || bitVectBitValue (ic->rSurv, IYL_IDX));
+        }
 
       if (push_hl)
         {
@@ -5596,7 +5623,7 @@ genFunction (const iCode * ic)
     }
   sym = OP_SYMBOL (IC_LEFT (ic));
 
-  _G.omitFramePtr = should_omit_frame_ptr;
+  _G.omitFramePtr = options.oldralloc ? (!IS_GB && options.omitFramePtr) : should_omit_frame_ptr;
 
   if (!IS_GB && !z80_opts.noOmitFramePtr && !stackParm && !sym->stack)
     {
@@ -6629,7 +6656,7 @@ genPlus (iCode * ic)
 
   // Avoid overwriting operand in h or l when setupToPreserveCarry () loads hl - only necessary if carry is actually used during addition.
   premoved = FALSE;
-  if (size > 1 && !(size == 2 && isPair (leftop) && (rightop->type == AOP_LIT || rightop->type == AOP_IY)))
+  if (size > 1 && !(size == 2 && (isPair (leftop) && rightop->type == AOP_LIT)))
     {
       if (!couldDestroyCarry (leftop) && (couldDestroyCarry (rightop) || couldDestroyCarry (AOP (IC_RESULT (ic)))))
         {
@@ -6778,7 +6805,7 @@ genPlus (iCode * ic)
           regalloc_dry_run_cost += 1;
           i += 2;
         }
-      else if ((!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
+      else if (!options.oldralloc && (!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
           aopInReg (leftop, i, C_IDX) && !bitVectBitValue (ic->rSurv, B_IDX))
         {
           if (aopInReg (leftop, i + 1, H_IDX) || aopInReg (leftop, i + 1, L_IDX))
@@ -6796,7 +6823,7 @@ genPlus (iCode * ic)
           regalloc_dry_run_cost += 1;
           i += 2;
         }
-       else if ((!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
+       else if (!options.oldralloc && (!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
           aopInReg (rightop, i, E_IDX) && !bitVectBitValue (ic->rSurv, D_IDX))
         {
           if (aopInReg (rightop, i + 1, H_IDX) || aopInReg (rightop, i + 1, L_IDX))
@@ -6814,7 +6841,7 @@ genPlus (iCode * ic)
           regalloc_dry_run_cost += 1;
           i += 2;
         }
-       else if ((!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
+       else if (!options.oldralloc && (!premoved || i) && !started && i == size - 2 && aopInReg (AOP (IC_RESULT (ic)), i, HL_IDX) &&
           aopInReg (leftop, i, E_IDX) && !bitVectBitValue (ic->rSurv, D_IDX))
         {
           if (aopInReg (leftop, i + 1, H_IDX) || aopInReg (leftop, i + 1, L_IDX))
@@ -7496,7 +7523,8 @@ genMultOneChar (const iCode * ic)
       _G.stack.pushedDE = TRUE;
     }
   if (IS_RAB && !isPairDead (PAIR_BC, ic) ||
-  !(IS_Z180 || IS_EZ80_Z80) && bitVectBitValue (ic->rSurv, B_IDX))
+      !(IS_Z180 || IS_EZ80_Z80) && (!options.oldralloc && bitVectBitValue (ic->rSurv, B_IDX) ||
+                   options.oldralloc && bitVectBitValue (ic->rMask, B_IDX) && !(getPairId (AOP (IC_RESULT (ic))) == PAIR_BC)))
     {
       _push (PAIR_BC);
       savedB = TRUE;
@@ -11764,7 +11792,7 @@ genPointerGet (const iCode *ic)
   sym_link *retype;
   bool pushed_pair = FALSE;
   bool pushed_a = FALSE;
-  bool surviving_a = bitVectBitValue (ic->rSurv, A_IDX);
+  bool surviving_a = !options.oldralloc && bitVectBitValue (ic->rSurv, A_IDX);
   bool rightval_in_range;
 
   left = IC_LEFT (ic);
@@ -12511,7 +12539,7 @@ genPointerSet (iCode *ic)
   sym_link *letype;
   bool pushed_a = false;
   bool pushed_pair = false;
-  bool surviving_a = bitVectBitValue (ic->rSurv, A_IDX);
+  bool surviving_a = !options.oldralloc && bitVectBitValue (ic->rSurv, A_IDX);
 
   right = IC_RIGHT (ic);
   result = IC_RESULT (ic);
@@ -13300,7 +13328,7 @@ genCast (const iCode *ic)
   sym_link *rtype = operandType (IC_RIGHT (ic));
   operand *right = IC_RIGHT (ic);
   int size, offset;
-  bool surviving_a = bitVectBitValue (ic->rSurv, A_IDX);
+  bool surviving_a = !options.oldralloc && bitVectBitValue (ic->rSurv, A_IDX);
   bool pushed_a = FALSE;
 
   /* if they are equivalent then do nothing */

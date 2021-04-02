@@ -1,28 +1,3 @@
-2021-04-02 Philipp Klaus Krause <pkk AT spth.de>
-
-	* src/z80/z80.h,
-	  src/z80/ralloc2.cc:
-	  Remove infrastructure for reserving hl in register allocator.
-
-2021-04-02 Philipp Klaus Krause <pkk AT spth.de>
-
-	* src/z80/ralloc.c,
-	  src/z80/gen.c:
-	  Remove old register allocator code from z80-related backends.
-
-2021-04-02 Philipp Klaus Krause <pkk AT spth.de>
-
-	* src/z80/main.c,
-	  src/z80/ralloc.c,
-	  .version,
-	  doc/sdccman.lyx:
-	  Deprecate --oldralloc for z80-related backends.
-
-2021-04-02 Sergey Belyashov <sergey.belyashov@gmail.com>
-
-	* src/z80/gen.c:
-	  Fix one of highlighted bugs by previous change.
-
 2021-04-01 Sergey Belyashov <sergey.belyashov@gmail.com>
 
 	* src/z80/gen.c:
@@ -50,7 +25,7 @@
 
 2021-03-27 Sebastian 'basxto' Riedel <sdcc@basxto.de>
 
-	* src/z80/peeph.def:
+	* src/z80/peeph.def::
 	  Add new rules for pushing and treating xor a like #0.
 
 2021-03-26 Philipp Klaus Krause <pkk AT spth.de>
@@ -551,7 +526,16 @@
 	* src/z80/gen.c:
 	  Make end-of-call stack adjustment tolerate return value in a.
 
-2021-02-03 Philipp Klaus Krause <pkk AT spth.de>
+2020-02-04 Philipp Klaus Krause <pkk AT spth.de>
+
+	* support/regression/tests/atomic.c
+	  support/regression/tests/bug3440327.c
+	  support/regression/tests/gcc-torture-execute-pr60003.c
+	  support/regression/tests/setjmp.c
+	  support/regression/tests/z80n-push-nn.c:
+	  Disable asm-based tests.
+
+2020-02-03 Philipp Klaus Krause <pkk AT spth.de>
 
 	* src/z80/gen.c:
 	  Separate __z88dk_fastcall registers from return value registers.
@@ -562,6 +546,11 @@
 	  Fix a bug in code generation for wide unary minus with upper operand word in hl.
 
 2021-02-03 Philipp Klaus Krause <pkk AT spth.de>
+  
+	* device/lib/_memset.c:
+	  Remove asm implementation of memset for z80-related ports.
+
+2020-02-03 Philipp Klaus Krause <pkk AT spth.de>
 
 	* src/z80/gen.c,
 	  src/z80/peep.c:
